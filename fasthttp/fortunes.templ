@@ -1,0 +1,18 @@
+package main
+
+import "strconv"
+
+templ FortunesTempl(fortunes []Fortune) {
+	<!DOCTYPE html>
+	<html>
+	<head><title>Fortunes</title></head>
+	<body>
+	<table>
+	<tr><th>id</th><th>message</th></tr>
+	for _, fortune := range fortunes {
+		<tr><td>{strconv.Itoa(fortune.ID)}</td><td>{fortune.Message}</td></tr>
+	}
+	</table>
+	</body>
+	</html>
+}
