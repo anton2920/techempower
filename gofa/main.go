@@ -259,7 +259,7 @@ func main() {
 		log.Fatalf("Failed to create fortunes: %v", err)
 	}
 
-	const address = "0.0.0.0:7072"
+	const address = "0.0.0.0:7073"
 	l, err := tcp.Listen(address, 128)
 	if err != nil {
 		log.Fatalf("Failed to listen on port: %v", err)
