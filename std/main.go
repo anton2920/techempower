@@ -36,7 +36,7 @@ func FortunesHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Failed to read fortunes from DB: %v", err)
 		return
 	}
-	fortunes = append(fortunes, Fortune{Message: "Additional fortune added at request time."})
+	fortunes = append(fortunes, Fortune{ID: len(fortunes), Message: "Additional fortune added at request time."})
 
 	sort.Slice(fortunes, func(i, j int) bool {
 		return fortunes[i].Message < fortunes[j].Message
