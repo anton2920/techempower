@@ -280,6 +280,8 @@ func main() {
 	_ = syscall.IgnoreSignals(syscall.SIGINT, syscall.SIGTERM)
 	_ = q.AddSignals(syscall.SIGINT, syscall.SIGTERM)
 
+	time.PutTmRFC822(DateBuffer, time.ToTm(time.Unix()))
+
 	nworkers := min(runtime.GOMAXPROCS(0)/2, runtime.NumCPU())
 	qs := make([]*event.Queue, nworkers)
 	for i := 0; i < nworkers; i++ {
@@ -318,7 +320,7 @@ func main() {
 				counter++
 			case event.Timer:
 				now += e.Data
-				time.PutTmRFC822(DateBuffer, time.ToTm(now))
+				// time.PutTmRFC822(DateBuffer, time.ToTm(now))
 			case event.Signal:
 				log.Infof("Received signal %d, exitting...", e.Identifier)
 				quit = true
