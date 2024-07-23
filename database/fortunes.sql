@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS fortunes;
 
 CREATE TABLE fortunes (
 	id	INT NOT NULL,
-	message VARCHAR(2048) NOT NULL,
+	message VARCHAR(128) NOT NULL,
 	PRIMARY KEY (id)
 );
 

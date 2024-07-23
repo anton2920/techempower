@@ -20,7 +20,7 @@ type Fortune struct {
 	ID      database.ID
 	Message string
 
-	Data [2048]byte
+	Data [128]byte
 }
 
 const PageSize = 4096
