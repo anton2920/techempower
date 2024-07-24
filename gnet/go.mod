@@ -1,6 +1,6 @@
 module github.com/anton2920/techempower/gnet
 
-go 1.22.4
+go 1.22.2
 
 require github.com/panjf2000/gnet/v2 v2.5.7
 
