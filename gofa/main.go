@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/anton2920/gofa/database"
@@ -25,7 +26,7 @@ type Fortune struct {
 
 const PageSize = 4096
 
-var DateBuffer = make([]byte, time.RFC822Len)
+var DateBufferPtr unsafe.Pointer
 
 var FortunesDB *database.DB
 
@@ -147,10 +148,20 @@ func Router(ctx *http.Context, ws []http.Response, rs []http.Request) {
 	}
 }
 
-func ServerWorker(q *event.Queue) {
-	const batchSize = 64
+func GetDateHeader() []byte {
+	return unsafe.Slice((*byte)(atomic.LoadPointer(&DateBufferPtr)), time.RFC822Len)
+}
 
-	events := make([]event.Event, batchSize)
+func UpdateDateHeader(now int) {
+	buffer := make([]byte, time.RFC822Len)
+	time.PutTmRFC822(buffer, time.ToTm(now))
+	atomic.StorePointer(&DateBufferPtr, unsafe.Pointer(&buffer[0]))
+}
+
+func ServerWorker(q *event.Queue) {
+	events := make([]event.Event, 64)
+
+	const batchSize = 32
 	ws := make([]http.Response, batchSize)
 	rs := make([]http.Request, batchSize)
 
@@ -160,6 +171,7 @@ func ServerWorker(q *event.Queue) {
 			log.Errorf("Failed to get events from client queue: %v", err)
 			continue
 		}
+		dateBuffer := GetDateHeader()
 
 		for i := 0; i < n; i++ {
 			e := &events[i]
@@ -184,7 +196,7 @@ func ServerWorker(q *event.Queue) {
 					n, err := http.Read(ctx)
 					if err != nil {
 						if err == http.NoSpaceLeft {
-							http1.FillError(ctx, err, DateBuffer)
+							http1.FillError(ctx, err, dateBuffer)
 							http.CloseAfterWrite(ctx)
 							break
 						}
@@ -197,12 +209,12 @@ func ServerWorker(q *event.Queue) {
 					for n > 0 {
 						n, err = http1.ParseRequestsUnsafe(ctx, rs)
 						if err != nil {
-							http1.FillError(ctx, err, DateBuffer)
+							http1.FillError(ctx, err, dateBuffer)
 							http.CloseAfterWrite(ctx)
 							break
 						}
 						Router(ctx, ws[:n], rs[:n])
-						http1.FillResponses(ctx, ws[:n], DateBuffer)
+						http1.FillResponses(ctx, ws[:n], dateBuffer)
 					}
 				}
 				fallthrough
@@ -280,8 +292,6 @@ func main() {
 	_ = syscall.IgnoreSignals(syscall.SIGINT, syscall.SIGTERM)
 	_ = q.AddSignals(syscall.SIGINT, syscall.SIGTERM)
 
-	time.PutTmRFC822(DateBuffer, time.ToTm(time.Unix()))
-
 	nworkers := min(runtime.GOMAXPROCS(0)/2, runtime.NumCPU())
 	qs := make([]*event.Queue, nworkers)
 	for i := 0; i < nworkers; i++ {
@@ -291,9 +301,10 @@ func main() {
 		}
 		go ServerWorker(qs[i])
 	}
+	now := time.Unix()
+	UpdateDateHeader(now)
 
 	events := make([]event.Event, 64)
-	now := time.Unix()
 	var counter int
 
 	var quit bool
@@ -311,16 +322,16 @@ func main() {
 			default:
 				log.Panicf("Unhandled event: %#v", e)
 			case event.Read:
-				ctx, err := http.Accept(l, PageSize)
+				ctx, err := http.Accept(l, 1024)
 				if err != nil {
 					log.Errorf("Failed to accept new HTTP connection: %v", err)
 					continue
 				}
-				_ = http.AddClientToQueue(qs[counter%len(qs)], ctx, event.RequestRead, event.TriggerEdge)
+				_ = qs[counter%len(qs)].AddHTTP(ctx, event.RequestRead, event.TriggerEdge)
 				counter++
 			case event.Timer:
 				now += e.Data
-				// time.PutTmRFC822(DateBuffer, time.ToTm(now))
+				UpdateDateHeader(now)
 			case event.Signal:
 				log.Infof("Received signal %d, exitting...", e.Identifier)
 				quit = true
