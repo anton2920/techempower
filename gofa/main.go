@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/anton2920/gofa/alloc"
 	"github.com/anton2920/gofa/database"
 	"github.com/anton2920/gofa/event"
 	"github.com/anton2920/gofa/log"
@@ -35,7 +35,7 @@ func CreateFortune(fortune *Fortune) error {
 	var fortuneDB Fortune
 	var err error
 
-	data := unsafe.Slice(&fortuneDB.Data[0], len(fortuneDB.Data))
+	data := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&fortuneDB.Data[0])), Len: len(fortuneDB.Data), Cap: len(fortuneDB.Data)}))
 
 	fortune.ID, err = database.IncrementNextID(FortunesDB)
 	if err != nil {
@@ -45,11 +45,11 @@ func CreateFortune(fortune *Fortune) error {
 	fortuneDB.ID = fortune.ID
 	database.String2DBString(&fortuneDB.Message, fortune.Message, data, 0)
 
-	return database.Write(FortunesDB, fortuneDB.ID, &fortuneDB)
+	return database.Write(FortunesDB, fortuneDB.ID, unsafe.Pointer(&fortuneDB), int(unsafe.Sizeof(fortuneDB)))
 }
 
 func GetFortunes(pos *int64, fortunes []Fortune) (int, error) {
-	n, err := database.ReadMany(FortunesDB, pos, fortunes)
+	n, err := database.ReadMany(FortunesDB, pos, *(*[]byte)(unsafe.Pointer(&fortunes)), int(unsafe.Sizeof(fortunes[0])))
 	if err != nil {
 		return 0, err
 	}
@@ -150,7 +150,7 @@ func Router(ctx *http.Context, ws []http.Response, rs []http.Request) {
 }
 
 func GetDateHeader() []byte {
-	return unsafe.Slice((*byte)(atomic.LoadPointer(&DateBufferPtr)), time.RFC822Len)
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(atomic.LoadPointer(&DateBufferPtr)), Len: time.RFC822Len, Cap: time.RFC822Len}))
 }
 
 func UpdateDateHeader(now int) {
@@ -293,8 +293,7 @@ func main() {
 	_ = syscall.IgnoreSignals(syscall.SIGINT, syscall.SIGTERM)
 	_ = q.AddSignals(syscall.SIGINT, syscall.SIGTERM)
 
-	nworkers := min(runtime.GOMAXPROCS(0)/2, runtime.NumCPU())
-	ctxPool := alloc.NewSyncPool[http.Context](nworkers * 512)
+	nworkers := runtime.NumCPU() / 2
 	qs := make([]*event.Queue, nworkers)
 	for i := 0; i < nworkers; i++ {
 		qs[i], err = event.NewQueue()
@@ -324,7 +323,7 @@ func main() {
 			default:
 				log.Panicf("Unhandled event: %#v", e)
 			case event.Read:
-				ctx, err := http.Accept(l, &ctxPool, 1024)
+				ctx, err := http.Accept(l, 1024)
 				if err != nil {
 					if err == http.TooManyClients {
 						http1.FillError(ctx, err, GetDateHeader())
