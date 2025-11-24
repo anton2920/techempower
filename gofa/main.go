@@ -16,6 +16,7 @@ import (
 	"github.com/anton2920/gofa/net/tcp"
 	"github.com/anton2920/gofa/syscall"
 	"github.com/anton2920/gofa/time"
+	"github.com/anton2920/gofa/trace"
 )
 
 type Fortune struct {
@@ -261,6 +262,9 @@ func CreateFortunes() error {
 
 func main() {
 	var err error
+
+	trace.BeginProfile()
+	defer trace.EndAndPrintProfile()
 
 	FortunesDB, err = database.Open("Fortunes.db")
 	if err != nil {
